@@ -6,25 +6,39 @@ TBD - created by archiving change add-todo-rest-api. Update Purpose after archiv
 ### Requirement: Todo item structure
 
 A todo item SHALL have an identifier, a title, a description, a done flag, a due
-timestamp, a priority, a set of tags, a created timestamp, and an updated timestamp.
-The identifier SHALL be a UUID. The title SHALL NOT be blank and SHALL be at most 255
-characters. The description SHALL be optional. The due timestamp SHALL be optional and
-SHALL carry a UTC offset. The priority SHALL be one of `LOW`, `MEDIUM`, and `HIGH`, and
-SHALL be `MEDIUM` when a request omits it. A tag SHALL NOT be blank and SHALL be at
-most 50 characters. An item SHALL hold at most 20 tags, and the tags SHALL be unique
-within one item. The system SHALL set the identifier, the created timestamp, and the
-updated timestamp. A client SHALL NOT set them.
+timestamp, a priority, a set of tags, a list of images, a created timestamp, and an
+updated timestamp. The identifier SHALL be a UUID. The title SHALL NOT be blank and
+SHALL be at most 255 characters. The description SHALL be optional. The due timestamp
+SHALL be optional and SHALL carry a UTC offset. The priority SHALL be one of `LOW`,
+`MEDIUM`, and `HIGH`, and SHALL be `MEDIUM` when a request omits it. A tag SHALL NOT be
+blank and SHALL be at most 50 characters. An item SHALL hold at most 20 tags, and the
+tags SHALL be unique within one item. An item SHALL hold at most 20 images. The system
+SHALL set the identifier, the created timestamp, and the updated timestamp. A client
+SHALL NOT set them.
+
+Every todo item response SHALL hold an `images` array. Each entry SHALL hold the image
+id, the content type, the size in bytes, the original file name, the created timestamp,
+and the download path. The array SHALL be empty when the item holds no image. A client
+SHALL NOT set the images through `/api/todos`. Only the endpoints under
+`/api/todos/{id}/images` change the images of an item.
 
 #### Scenario: Server assigns the identity and the timestamps
 
 - **WHEN** the system creates a todo item
 - **THEN** the item has a UUID identifier
 - **AND** the created timestamp and the updated timestamp hold the time of the creation
+- **AND** the image list of the item is empty
 
 #### Scenario: Client cannot set the identity or the timestamps
 
 - **WHEN** a request body contains an id, a created value, or an updated value
 - **THEN** the system ignores those values
+
+#### Scenario: Client cannot set the images through the item endpoints
+
+- **WHEN** a request body to `POST /api/todos`, `PUT /api/todos/{id}`, or
+  `PATCH /api/todos/{id}` contains an `images` value
+- **THEN** the system ignores that value
 
 #### Scenario: An unknown priority is invalid
 
@@ -199,7 +213,8 @@ carry the title, the description, the done flag, the due timestamp, the priority
 the tag list. The system SHALL overwrite all six fields and SHALL set the updated
 timestamp to the time of the request. An omitted due timestamp SHALL clear the value,
 an omitted tag list SHALL clear the tags, and an omitted priority SHALL set the
-priority to `MEDIUM`. The identifier and the created timestamp SHALL stay unchanged.
+priority to `MEDIUM`. The identifier, the created timestamp, and the images SHALL stay
+unchanged.
 
 #### Scenario: Replace an existing item
 
@@ -223,6 +238,12 @@ priority to `MEDIUM`. The identifier and the created timestamp SHALL stay unchan
 - **THEN** the due timestamp of the item becomes null
 - **AND** the tag list of the item becomes empty
 - **AND** the priority of the item becomes `MEDIUM`
+
+#### Scenario: Replace keeps the images
+
+- **WHEN** a client sends `PUT /api/todos/{id}` for an item that holds two images
+- **THEN** the item still holds both images
+- **AND** the response body holds both images
 
 #### Scenario: Replace sets a new tag list
 
@@ -297,13 +318,21 @@ system SHALL set the updated timestamp when it changes the item.
 
 ### Requirement: Delete a todo item
 
-The API SHALL delete a todo item through `DELETE /api/todos/{id}`.
+The API SHALL delete a todo item through `DELETE /api/todos/{id}`. The system SHALL
+also remove the metadata and the stored objects of every image of that item.
 
 #### Scenario: Delete an existing item
 
 - **WHEN** a client sends `DELETE /api/todos/{id}` for a stored item
 - **THEN** the response status is 204 with an empty body
 - **AND** a later `GET /api/todos/{id}` returns 404
+
+#### Scenario: Delete an item that holds images
+
+- **WHEN** a client sends `DELETE /api/todos/{id}` for an item with two images
+- **THEN** the response status is 204
+- **AND** the database holds no metadata row for those images
+- **AND** the object store holds no object for those images
 
 #### Scenario: Delete an unknown item
 
