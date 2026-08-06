@@ -92,23 +92,26 @@ class TodoItemService {
                 false)));
     }
 
+    // A present field takes its value, including a null that clears the field. An
+    // undefined field keeps the value of the stored item. Validation rejects a present
+    // null on a field that may not be null before the request reaches this method.
     TodoItemWithImages patch(
             UUID id,
-            String title,
-            String description,
-            Boolean done,
-            OffsetDateTime dueAt,
-            Priority priority,
-            List<String> tags) {
+            Patchable<String> title,
+            Patchable<String> description,
+            Patchable<Boolean> done,
+            Patchable<OffsetDateTime> dueAt,
+            Patchable<Priority> priority,
+            Patchable<List<String>> tags) {
         TodoItem existing = find(id);
         return withImages(repository.save(new TodoItem(
                 id,
-                title != null ? title : existing.title(),
-                description != null ? description : existing.description(),
-                done != null ? done : existing.done(),
-                dueAt != null ? truncate(dueAt) : existing.dueAt(),
-                priority != null ? priority : existing.priority(),
-                tags != null ? toTags(tags) : existing.tags(),
+                title.isPresent() ? title.get() : existing.title(),
+                description.isPresent() ? description.get() : existing.description(),
+                done.isPresent() ? done.get() : existing.done(),
+                dueAt.isPresent() ? truncate(dueAt.get()) : existing.dueAt(),
+                priority.isPresent() ? priority.get() : existing.priority(),
+                tags.isPresent() ? toTags(tags.get()) : existing.tags(),
                 existing.created(),
                 now(),
                 false)));

@@ -245,6 +245,115 @@ class TodoItemApiTest {
     }
 
     @Test
+    void patchWithAnExplicitNullDescriptionClearsTheDescription() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "description": "Two litres", "dueAt": "2030-03-15T10:00:00Z",
+                 "priority": "HIGH", "tags": ["work"]}""");
+
+        TodoItemResponse patched = patch(created.id(), """
+                {"description": null}""");
+
+        assertThat(patched.description()).isNull();
+        assertThat(patched.title()).isEqualTo("Buy milk");
+        assertThat(patched.done()).isFalse();
+        assertThat(patched.dueAt().toInstant()).isEqualTo(MARCH.toInstant());
+        assertThat(patched.priority()).isEqualTo(Priority.HIGH);
+        assertThat(patched.tags()).containsExactly("work");
+        assertThat(findItem(created.id()).description()).isNull();
+    }
+
+    @Test
+    void patchWithAnExplicitNullDueTimestampClearsTheDueTimestamp() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "description": "Two litres", "dueAt": "2030-03-15T10:00:00Z",
+                 "priority": "HIGH", "tags": ["work"]}""");
+
+        TodoItemResponse patched = patch(created.id(), """
+                {"dueAt": null}""");
+
+        assertThat(patched.dueAt()).isNull();
+        assertThat(patched.title()).isEqualTo("Buy milk");
+        assertThat(patched.description()).isEqualTo("Two litres");
+        assertThat(patched.done()).isFalse();
+        assertThat(patched.priority()).isEqualTo(Priority.HIGH);
+        assertThat(patched.tags()).containsExactly("work");
+        assertThat(findItem(created.id()).dueAt()).isNull();
+    }
+
+    @Test
+    void patchWithATitleOnlyKeepsTheDescriptionAndTheDueTimestamp() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "description": "Two litres", "dueAt": "2030-03-15T10:00:00Z"}""");
+
+        TodoItemResponse patched = patch(created.id(), """
+                {"title": "Buy bread"}""");
+
+        assertThat(patched.title()).isEqualTo("Buy bread");
+        assertThat(patched.description()).isEqualTo("Two litres");
+        assertThat(patched.dueAt().toInstant()).isEqualTo(MARCH.toInstant());
+    }
+
+    @Test
+    void patchWithAnEmptyBodyChangesNoField() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "description": "Two litres", "dueAt": "2030-03-15T10:00:00Z",
+                 "priority": "HIGH", "tags": ["work"]}""");
+
+        TodoItemResponse patched = patch(created.id(), "{}");
+
+        assertThat(patched.title()).isEqualTo(created.title());
+        assertThat(patched.description()).isEqualTo(created.description());
+        assertThat(patched.done()).isEqualTo(created.done());
+        assertThat(patched.dueAt().toInstant()).isEqualTo(created.dueAt().toInstant());
+        assertThat(patched.priority()).isEqualTo(created.priority());
+        assertThat(patched.tags()).containsExactlyElementsOf(created.tags());
+    }
+
+    @Test
+    void patchRejectsAnExplicitNullTitle() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "priority": "HIGH", "tags": ["work"]}""");
+
+        assertBadRequest(patchRaw(created.id(), """
+                {"title": null}"""));
+
+        assertItemUnchanged(created);
+    }
+
+    @Test
+    void patchRejectsAnExplicitNullDoneFlag() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "priority": "HIGH", "tags": ["work"]}""");
+
+        assertBadRequest(patchRaw(created.id(), """
+                {"done": null}"""));
+
+        assertItemUnchanged(created);
+    }
+
+    @Test
+    void patchRejectsAnExplicitNullPriority() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "priority": "HIGH", "tags": ["work"]}""");
+
+        assertBadRequest(patchRaw(created.id(), """
+                {"priority": null}"""));
+
+        assertItemUnchanged(created);
+    }
+
+    @Test
+    void patchRejectsAnExplicitNullTagList() {
+        TodoItemResponse created = create("""
+                {"title": "Buy milk", "priority": "HIGH", "tags": ["work"]}""");
+
+        assertBadRequest(patchRaw(created.id(), """
+                {"tags": null}"""));
+
+        assertItemUnchanged(created);
+    }
+
+    @Test
     void filtersByOnePriority() {
         String group = "filter-one-priority";
         TodoItemResponse high = create(taggedItem("Buy milk", "\"priority\": \"HIGH\"", group));
@@ -759,6 +868,26 @@ class TodoItemApiTest {
                 .toEntity(TodoItemResponse.class);
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         return response.getBody();
+    }
+
+    private ResponseEntity<String> patchRaw(UUID id, String body) {
+        return client.patch()
+                .uri("/api/todos/" + id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toEntity(String.class);
+    }
+
+    private void assertItemUnchanged(TodoItemResponse created) {
+        TodoItemResponse stored = findItem(created.id());
+        assertThat(stored.title()).isEqualTo(created.title());
+        assertThat(stored.description()).isEqualTo(created.description());
+        assertThat(stored.done()).isEqualTo(created.done());
+        assertThat(stored.dueAt()).isEqualTo(created.dueAt());
+        assertThat(stored.priority()).isEqualTo(created.priority());
+        assertThat(stored.tags()).containsExactlyElementsOf(created.tags());
+        assertThat(stored.updated()).isEqualTo(created.updated());
     }
 
     private List<TodoItemResponse> list(String query) {
