@@ -1,0 +1,53 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-item-due-priority-tags
+      author: todo
+      changes:
+        - addColumn:
+            tableName: todo_item
+            columns:
+              - column:
+                  name: due_at
+                  type: timestamptz
+              - column:
+                  name: priority
+                  type: varchar(10)
+                  defaultValue: MEDIUM
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: todo_item_tag
+            columns:
+              - column:
+                  name: todo_item_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: tag
+                  type: varchar(50)
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: todo_item_tag
+            columnNames: todo_item_id, tag
+            constraintName: pk_todo_item_tag
+        - addForeignKeyConstraint:
+            baseTableName: todo_item_tag
+            baseColumnNames: todo_item_id
+            constraintName: fk_todo_item_tag_todo_item
+            referencedTableName: todo_item
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - createIndex:
+            tableName: todo_item
+            indexName: idx_todo_item_due_at
+            columns:
+              - column:
+                  name: due_at
+        - createIndex:
+            tableName: todo_item_tag
+            indexName: idx_todo_item_tag_tag
+            columns:
+              - column:
+                  name: tag

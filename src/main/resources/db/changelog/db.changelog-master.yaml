@@ -2,3 +2,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/001-create-todo-item.yaml
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/changes/002-add-item-due-priority-tags.yaml
+      relativeToChangelogFile: false

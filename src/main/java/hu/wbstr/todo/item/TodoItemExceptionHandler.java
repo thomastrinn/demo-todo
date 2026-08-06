@@ -12,4 +12,9 @@ class TodoItemExceptionHandler {
     ProblemDetail handleNotFound(TodoItemNotFoundException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
     }
+
+    @ExceptionHandler(InvalidTodoItemSortException.class)
+    ProblemDetail handleInvalidSort(InvalidTodoItemSortException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
 }
