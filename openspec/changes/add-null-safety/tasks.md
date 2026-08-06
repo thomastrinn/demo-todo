@@ -48,7 +48,7 @@
 
 ## 6. Full verification
 
-- [ ] 6.1 Run `./mvnw clean verify` and confirm the build succeeds with all tests passing
-- [ ] 6.2 Run `git status` and confirm no temporary file remains in the working tree
-- [ ] 6.3 Commit to the `feat/null-safety` branch with a conventional commit message that uses
+- [x] 6.1 Run `./mvnw clean verify` and confirm the build succeeds with all tests passing
+- [x] 6.2 Run `git status` and confirm no temporary file remains in the working tree
+- [x] 6.3 Commit to the `feat/null-safety` branch with a conventional commit message that uses
       the `build` type
