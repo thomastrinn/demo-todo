@@ -29,8 +29,19 @@
     <properties>
         <java.version>25</java.version>
         <spring-modulith.version>2.1.0</spring-modulith.version>
+        <jspecify.version>1.0.0</jspecify.version>
+        <!-- Pinned: error-prone 2.50.0 breaks nullaway 0.12.7 with
+             NoClassDefFoundError on com.google.errorprone.predicates.type.DescendantOf.
+             Raise this only together with the nullaway version. -->
+        <error-prone.version>2.39.0</error-prone.version>
+        <nullaway.version>0.12.7</nullaway.version>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>${jspecify.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jdbc</artifactId>
@@ -139,7 +150,24 @@
                                     <groupId>org.springframework.boot</groupId>
                                     <artifactId>spring-boot-configuration-processor</artifactId>
                                 </path>
+                                <path>
+                                    <groupId>com.google.errorprone</groupId>
+                                    <artifactId>error_prone_core</artifactId>
+                                    <version>${error-prone.version}</version>
+                                </path>
+                                <path>
+                                    <groupId>com.uber.nullaway</groupId>
+                                    <artifactId>nullaway</artifactId>
+                                    <version>${nullaway.version}</version>
+                                </path>
                             </annotationProcessorPaths>
+                            <compilerArgs>
+                                <arg>-XDcompilePolicy=simple</arg>
+                                <arg>--should-stop=ifError=FLOW</arg>
+                                <arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR
+                                    -XepOpt:NullAway:JSpecifyMode=true
+                                    -XepOpt:NullAway:AnnotatedPackages=hu.wbstr.todo</arg>
+                            </compilerArgs>
                         </configuration>
                     </execution>
                 </executions>
