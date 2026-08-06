@@ -19,8 +19,12 @@ class TodoItemQueryRepositoryImpl implements TodoItemQueryRepository {
     private static final String SELECT =
             "SELECT id, title, description, done, due_at, priority, created, updated FROM todo_item";
 
+    private static final String SEARCH_QUERY = "websearch_to_tsquery('simple', :q)";
+
     // A sort by the priority name gives HIGH, LOW, MEDIUM, so the query ranks the values.
+    // The A and B weights of the generated column rank a title hit above a description hit.
     private static final Map<String, String> SORT_EXPRESSIONS = Map.of(
+            "relevance", "ts_rank(search_vector, " + SEARCH_QUERY + ")",
             "dueAt", "due_at",
             "priority", "CASE priority WHEN 'LOW' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'HIGH' THEN 3 END",
             "created", "created",
@@ -52,6 +56,10 @@ class TodoItemQueryRepositoryImpl implements TodoItemQueryRepository {
 
     private static String where(TodoItemQuery query, Map<String, Object> parameters) {
         List<String> conditions = new ArrayList<>();
+        if (query.searchText() != null) {
+            conditions.add("search_vector @@ " + SEARCH_QUERY);
+            parameters.put("q", query.searchText());
+        }
         if (query.priorities() != null && !query.priorities().isEmpty()) {
             conditions.add("priority IN (:priorities)");
             parameters.put("priorities", query.priorities().stream().map(Priority::name).toList());

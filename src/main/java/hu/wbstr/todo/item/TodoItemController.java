@@ -38,7 +38,7 @@ class TodoItemController {
     }
 
     @GetMapping
-    List<TodoItemResponse> findAll(TodoItemListParams params) {
+    List<TodoItemResponse> findAll(@Valid TodoItemListParams params) {
         return service.findAll(toQuery(params)).stream().map(TodoItemResponse::of).toList();
     }
 
@@ -78,7 +78,9 @@ class TodoItemController {
     }
 
     private static TodoItemQuery toQuery(TodoItemListParams params) {
-        String field = TodoItemQuery.DEFAULT_SORT_FIELD;
+        String searchText = searchText(params);
+        // A search orders by the relevance, every other request by the created timestamp.
+        String field = searchText != null ? TodoItemQuery.RELEVANCE_SORT_FIELD : TodoItemQuery.DEFAULT_SORT_FIELD;
         Sort.Direction direction = Sort.Direction.DESC;
         if (params.sort() != null) {
             String[] parts = params.sort().split(",", 2);
@@ -90,8 +92,13 @@ class TodoItemController {
             if (!TodoItemQuery.SORT_FIELDS.contains(field)) {
                 throw new InvalidTodoItemSortException(params.sort());
             }
+            // The relevance expression binds the search text, so it needs one.
+            if (TodoItemQuery.RELEVANCE_SORT_FIELD.equals(field) && searchText == null) {
+                throw new InvalidTodoItemSortException(params.sort());
+            }
         }
         return new TodoItemQuery(
+                searchText,
                 params.priority(),
                 params.tag(),
                 params.done(),
@@ -99,5 +106,12 @@ class TodoItemController {
                 params.dueAfter(),
                 field,
                 direction);
+    }
+
+    private static String searchText(TodoItemListParams params) {
+        if (params.q() == null || params.q().isBlank()) {
+            return null;
+        }
+        return params.q().trim();
     }
 }

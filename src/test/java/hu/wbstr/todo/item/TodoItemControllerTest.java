@@ -224,6 +224,71 @@ class TodoItemControllerTest {
     }
 
     @Test
+    void listPassesTheSearchTextToTheService() throws Exception {
+        given(service.findAll(any())).willReturn(List.of());
+
+        mockMvc.perform(get("/api/todos").param("q", "invoice")).andExpect(status().isOk());
+
+        assertThat(capturedQuery().searchText()).isEqualTo("invoice");
+    }
+
+    @Test
+    void listWithABlankSearchTextPassesNullToTheService() throws Exception {
+        given(service.findAll(any())).willReturn(List.of());
+
+        mockMvc.perform(get("/api/todos").param("q", "   ")).andExpect(status().isOk());
+
+        assertThat(capturedQuery().searchText()).isNull();
+    }
+
+    @Test
+    void listTrimsTheOuterSpacesOfTheSearchText() throws Exception {
+        given(service.findAll(any())).willReturn(List.of());
+
+        mockMvc.perform(get("/api/todos").param("q", "  invoice  ")).andExpect(status().isOk());
+
+        assertThat(capturedQuery().searchText()).isEqualTo("invoice");
+    }
+
+    @Test
+    void listWithASearchTextAndNoSortQueriesTheRelevanceBestFirst() throws Exception {
+        given(service.findAll(any())).willReturn(List.of());
+
+        mockMvc.perform(get("/api/todos").param("q", "invoice")).andExpect(status().isOk());
+
+        assertThat(capturedQuery().sortField()).isEqualTo("relevance");
+        assertThat(capturedQuery().direction()).isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    void listWithABlankSearchTextAndNoSortQueriesTheCreatedTimestampNewestFirst() throws Exception {
+        given(service.findAll(any())).willReturn(List.of());
+
+        mockMvc.perform(get("/api/todos").param("q", " ")).andExpect(status().isOk());
+
+        assertThat(capturedQuery().sortField()).isEqualTo("created");
+        assertThat(capturedQuery().direction()).isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    void listWithARelevanceSortAndNoSearchTextReturns400() throws Exception {
+        mockMvc.perform(get("/api/todos").param("sort", "relevance,desc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void listWithASearchTextAboveTwoHundredAndFiftyFiveCharactersReturns400() throws Exception {
+        mockMvc.perform(get("/api/todos").param("q", "x".repeat(256)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void listWithASortFieldOnlyUsesTheAscendingDirection() throws Exception {
         given(service.findAll(any())).willReturn(List.of());
 

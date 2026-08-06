@@ -35,7 +35,7 @@ class TodoItemQueryRepositoryTest {
         UUID first = save("Buy milk", false, null, Priority.MEDIUM).id();
         UUID second = save("Buy bread", true, JANUARY, Priority.HIGH).id();
 
-        assertThat(ids(repository.search(filter(null, null, null, null, null))))
+        assertThat(ids(repository.search(filter(null, null, null, null, null, null))))
                 .containsExactlyInAnyOrder(first, second);
     }
 
@@ -44,7 +44,7 @@ class TodoItemQueryRepositoryTest {
         UUID id = save("Buy milk", false, null, Priority.MEDIUM, "work", "urgent").id();
         save("Buy bread", false, null, Priority.MEDIUM);
 
-        List<TodoItem> found = repository.search(filter(null, List.of("work"), null, null, null));
+        List<TodoItem> found = repository.search(filter(null, null, List.of("work"), null, null, null));
 
         assertThat(found).singleElement().satisfies(item -> {
             assertThat(item.id()).isEqualTo(id);
@@ -58,7 +58,7 @@ class TodoItemQueryRepositoryTest {
         UUID high = save("Buy milk", false, null, Priority.HIGH).id();
         save("Buy bread", false, null, Priority.LOW);
 
-        assertThat(ids(repository.search(filter(List.of(Priority.HIGH), null, null, null, null))))
+        assertThat(ids(repository.search(filter(null, List.of(Priority.HIGH), null, null, null, null))))
                 .containsExactly(high);
     }
 
@@ -68,7 +68,7 @@ class TodoItemQueryRepositoryTest {
         UUID low = save("Buy bread", false, null, Priority.LOW).id();
         save("Buy eggs", false, null, Priority.MEDIUM);
 
-        assertThat(ids(repository.search(filter(List.of(Priority.HIGH, Priority.LOW), null, null, null, null))))
+        assertThat(ids(repository.search(filter(null, List.of(Priority.HIGH, Priority.LOW), null, null, null, null))))
                 .containsExactlyInAnyOrder(high, low);
     }
 
@@ -77,7 +77,7 @@ class TodoItemQueryRepositoryTest {
         UUID tagged = save("Buy milk", false, null, Priority.MEDIUM, "work").id();
         save("Buy bread", false, null, Priority.MEDIUM, "home");
 
-        assertThat(ids(repository.search(filter(null, List.of("work"), null, null, null))))
+        assertThat(ids(repository.search(filter(null, null, List.of("work"), null, null, null))))
                 .containsExactly(tagged);
     }
 
@@ -86,7 +86,7 @@ class TodoItemQueryRepositoryTest {
         UUID both = save("Buy milk", false, null, Priority.MEDIUM, "work", "urgent").id();
         save("Buy bread", false, null, Priority.MEDIUM, "work");
 
-        assertThat(ids(repository.search(filter(null, List.of("work", "urgent"), null, null, null))))
+        assertThat(ids(repository.search(filter(null, null, List.of("work", "urgent"), null, null, null))))
                 .containsExactly(both);
     }
 
@@ -95,7 +95,7 @@ class TodoItemQueryRepositoryTest {
         UUID open = save("Buy milk", false, null, Priority.MEDIUM).id();
         save("Buy bread", true, null, Priority.MEDIUM);
 
-        assertThat(ids(repository.search(filter(null, null, false, null, null)))).containsExactly(open);
+        assertThat(ids(repository.search(filter(null, null, null, false, null, null)))).containsExactly(open);
     }
 
     @Test
@@ -104,7 +104,7 @@ class TodoItemQueryRepositoryTest {
         save("Buy bread", false, MARCH, Priority.MEDIUM);
         save("Buy eggs", false, null, Priority.MEDIUM);
 
-        assertThat(ids(repository.search(filter(null, null, null, MARCH, JANUARY))))
+        assertThat(ids(repository.search(filter(null, null, null, null, MARCH, JANUARY))))
                 .containsExactly(inside);
     }
 
@@ -114,8 +114,135 @@ class TodoItemQueryRepositoryTest {
         save("Buy bread", true, null, Priority.MEDIUM, "work");
         save("Buy eggs", false, null, Priority.MEDIUM, "home");
 
-        assertThat(ids(repository.search(filter(null, List.of("work"), false, null, null))))
+        assertThat(ids(repository.search(filter(null, null, List.of("work"), false, null, null))))
                 .containsExactly(match);
+    }
+
+    @Test
+    void matchesAWordInTheTitle() {
+        UUID match = save("Pay the invoice", false, null, Priority.MEDIUM).id();
+        save("Buy milk", false, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("invoice")))).containsExactly(match);
+    }
+
+    @Test
+    void matchesAWordInTheDescription() {
+        UUID match = save("Buy milk", "Pay the invoice", false, null, Priority.MEDIUM).id();
+        save("Buy bread", "Two loaves", false, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("invoice")))).containsExactly(match);
+    }
+
+    @Test
+    void ignoresTheCaseOfTheSearchText() {
+        UUID match = save("Pay the invoice", false, null, Priority.MEDIUM).id();
+
+        assertThat(ids(repository.search(search("INVOICE")))).containsExactly(match);
+    }
+
+    @Test
+    void matchesAWordInsideALongerTitle() {
+        UUID match = save("Pay the invoice today", false, null, Priority.MEDIUM).id();
+
+        assertThat(ids(repository.search(search("invoice")))).containsExactly(match);
+    }
+
+    @Test
+    void matchesOnlyTheItemsThatHoldBothWords() {
+        UUID both = save("Pay the office invoice", false, null, Priority.MEDIUM).id();
+        save("Pay the invoice", false, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("invoice office")))).containsExactly(both);
+    }
+
+    @Test
+    void matchesAQuotedPhraseOnlyInThatWordOrder() {
+        UUID inOrder = save("Pay the invoice", false, null, Priority.MEDIUM).id();
+        save("Invoice the pay", false, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("\"pay the invoice\"")))).containsExactly(inOrder);
+    }
+
+    @Test
+    void matchesEitherWordAroundAnOr() {
+        UUID invoice = save("Pay the invoice", false, null, Priority.MEDIUM).id();
+        UUID receipt = save("File the receipt", false, null, Priority.MEDIUM).id();
+        save("Buy milk", false, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("invoice or receipt"))))
+                .containsExactlyInAnyOrder(invoice, receipt);
+    }
+
+    @Test
+    void dropsTheItemsThatHoldAWordWithALeadingMinus() {
+        UUID without = save("Pay the invoice", false, null, Priority.MEDIUM).id();
+        save("Pay the office invoice", false, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("invoice -office")))).containsExactly(without);
+    }
+
+    @Test
+    void returnsNoItemWhenTheSearchTextHoldsNoSearchableWord() {
+        save("Pay the invoice", false, null, Priority.MEDIUM);
+
+        assertThat(repository.search(search("+++"))).isEmpty();
+    }
+
+    @Test
+    void doesNotMatchATagValue() {
+        save("Buy milk", false, null, Priority.MEDIUM, "work");
+
+        assertThat(repository.search(search("work"))).isEmpty();
+    }
+
+    @Test
+    void combinesTheSearchAndThePriorityFilter() {
+        UUID high = save("Pay the invoice", false, null, Priority.HIGH).id();
+        save("Pay the invoice twice", false, null, Priority.LOW);
+        save("Buy milk", false, null, Priority.HIGH);
+
+        assertThat(ids(repository.search(filter("invoice", List.of(Priority.HIGH), null, null, null, null))))
+                .containsExactly(high);
+    }
+
+    @Test
+    void combinesTheSearchAndTheDoneFlag() {
+        UUID open = save("Pay the invoice", false, null, Priority.MEDIUM).id();
+        save("Pay the invoice again", true, null, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(filter("invoice", null, null, false, null, null))))
+                .containsExactly(open);
+    }
+
+    @Test
+    void combinesTheSearchWithATagAndADueWindow() {
+        UUID match = save("Pay the invoice", false, FEBRUARY, Priority.MEDIUM, "work").id();
+        save("Pay the invoice late", false, MARCH, Priority.MEDIUM, "work");
+        save("Pay the invoice", false, FEBRUARY, Priority.MEDIUM, "home");
+        save("Buy milk", false, FEBRUARY, Priority.MEDIUM, "work");
+
+        assertThat(ids(repository.search(filter("invoice", null, List.of("work"), null, MARCH, null))))
+                .containsExactly(match);
+    }
+
+    @Test
+    void putsATitleHitBeforeADescriptionHitInARelevanceSort() {
+        UUID titleHit = save("Pay the invoice", "Nothing else", false, null, Priority.MEDIUM).id();
+        UUID descriptionHit = save("Buy milk", "Pay the invoice", false, null, Priority.MEDIUM).id();
+
+        assertThat(ids(repository.search(search("invoice", "relevance", Sort.Direction.DESC))))
+                .containsExactly(titleHit, descriptionHit);
+    }
+
+    @Test
+    void keepsTheSearchFilterUnderAnExplicitSort() {
+        UUID early = save("Pay the invoice", false, JANUARY, Priority.MEDIUM).id();
+        UUID late = save("Pay the invoice again", false, MARCH, Priority.MEDIUM).id();
+        save("Buy milk", false, FEBRUARY, Priority.MEDIUM);
+
+        assertThat(ids(repository.search(search("invoice", "dueAt", Sort.Direction.ASC))))
+                .containsExactly(early, late);
     }
 
     @Test
@@ -181,11 +308,21 @@ class TodoItemQueryRepositoryTest {
     }
 
     private TodoItem save(String title, boolean done, OffsetDateTime dueAt, Priority priority, String... tags) {
+        return save(title, null, done, dueAt, priority, tags);
+    }
+
+    private TodoItem save(
+            String title,
+            String description,
+            boolean done,
+            OffsetDateTime dueAt,
+            Priority priority,
+            String... tags) {
         OffsetDateTime now = OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
         return repository.save(new TodoItem(
                 UUID.randomUUID(),
                 title,
-                null,
+                description,
                 done,
                 dueAt,
                 priority,
@@ -210,16 +347,25 @@ class TodoItemQueryRepositoryTest {
     }
 
     private static TodoItemQuery filter(
+            String searchText,
             List<Priority> priorities,
             List<String> tags,
             Boolean done,
             OffsetDateTime dueBefore,
             OffsetDateTime dueAfter) {
-        return new TodoItemQuery(priorities, tags, done, dueBefore, dueAfter, null, null);
+        return new TodoItemQuery(searchText, priorities, tags, done, dueBefore, dueAfter, null, null);
+    }
+
+    private static TodoItemQuery search(String searchText) {
+        return filter(searchText, null, null, null, null, null);
+    }
+
+    private static TodoItemQuery search(String searchText, String field, Sort.Direction direction) {
+        return new TodoItemQuery(searchText, null, null, null, null, null, field, direction);
     }
 
     private static TodoItemQuery sort(String field, Sort.Direction direction) {
-        return new TodoItemQuery(null, null, null, null, null, field, direction);
+        return new TodoItemQuery(null, null, null, null, null, null, field, direction);
     }
 
     private static List<UUID> ids(List<TodoItem> items) {
