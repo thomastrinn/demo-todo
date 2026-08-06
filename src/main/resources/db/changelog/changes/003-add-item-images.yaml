@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-add-item-images
+      author: todo
+      changes:
+        - createTable:
+            tableName: todo_item_image
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_todo_item_image
+                    nullable: false
+              - column:
+                  name: todo_item_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_type
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: size_bytes
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: file_name
+                  type: varchar(255)
+              - column:
+                  name: storage_key
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uk_todo_item_image_storage_key
+              - column:
+                  name: created
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: todo_item_image
+            baseColumnNames: todo_item_id
+            constraintName: fk_todo_item_image_todo_item
+            referencedTableName: todo_item
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - createIndex:
+            tableName: todo_item_image
+            indexName: idx_todo_item_image_todo_item_id
+            columns:
+              - column:
+                  name: todo_item_id

@@ -12,11 +12,13 @@ record TodoItemResponse(
         OffsetDateTime dueAt,
         Priority priority,
         List<String> tags,
+        List<TodoItemImageResponse> images,
         OffsetDateTime created,
         OffsetDateTime updated
 ) {
 
-    static TodoItemResponse of(TodoItem item) {
+    static TodoItemResponse of(TodoItemWithImages withImages) {
+        TodoItem item = withImages.item();
         return new TodoItemResponse(
                 item.id(),
                 item.title(),
@@ -25,6 +27,7 @@ record TodoItemResponse(
                 item.dueAt(),
                 item.priority(),
                 item.tags().stream().map(TodoItemTag::tag).sorted().toList(),
+                withImages.images().stream().map(TodoItemImageResponse::of).toList(),
                 item.created(),
                 item.updated());
     }
