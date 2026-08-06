@@ -109,8 +109,6 @@ feat(auth): Added new login.  # past tense, capitalised, trailing period
 
 ### Do not
 
-- Do not add promotional footers, tool attributions, or emoji to commit
-  messages unless explicitly asked.
 - Do not run `git commit` unless the user has asked you to commit.
 - Do not use `git commit --no-verify` to bypass hooks that reject a message —
   fix the message instead.
