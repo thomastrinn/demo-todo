@@ -50,19 +50,21 @@ class TodoItemService {
     }
 
     @Transactional(readOnly = true)
-    List<TodoItemWithImages> findAll(TodoItemQuery query) {
-        List<TodoItem> items = repository.search(query);
-        if (items.isEmpty()) {
-            return List.of();
+    TodoItemPage<TodoItemWithImages> findAll(TodoItemQuery query) {
+        TodoItemPage<TodoItem> page = repository.search(query);
+        if (page.items().isEmpty()) {
+            return new TodoItemPage<>(List.of(), page.total());
         }
         // One query for the whole page, grouped in memory, instead of a query per item.
         Map<UUID, List<TodoItemImage>> images = imageRepository
-                .findByTodoItemIdInOrderByCreatedAscIdAsc(items.stream().map(TodoItem::id).toList())
+                .findByTodoItemIdInOrderByCreatedAscIdAsc(page.items().stream().map(TodoItem::id).toList())
                 .stream()
                 .collect(Collectors.groupingBy(TodoItemImage::todoItemId));
-        return items.stream()
-                .map(item -> new TodoItemWithImages(item, images.getOrDefault(item.id(), List.of())))
-                .toList();
+        return new TodoItemPage<>(
+                page.items().stream()
+                        .map(item -> new TodoItemWithImages(item, images.getOrDefault(item.id(), List.of())))
+                        .toList(),
+                page.total());
     }
 
     @Transactional(readOnly = true)

@@ -14,8 +14,18 @@ record TodoItemQuery(
         OffsetDateTime dueBefore,
         OffsetDateTime dueAfter,
         String sortField,
-        Sort.Direction direction
+        Sort.Direction direction,
+        int limit,
+        int offset
 ) {
+
+    static final int DEFAULT_LIMIT = 20;
+
+    static final int MIN_LIMIT = 1;
+
+    static final int MAX_LIMIT = 100;
+
+    static final int DEFAULT_OFFSET = 0;
 
     static final String DEFAULT_SORT_FIELD = "created";
 

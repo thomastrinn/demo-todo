@@ -67,7 +67,7 @@ class TodoItemApiTest {
                 .uri("/api/todos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"title": "Buy milk", "description": "Two litres"}""")
+                        {"title": "Buy milk", "description": "Two litres", "tags": ["lifecycle"]}""")
                 .retrieve()
                 .toEntity(TodoItemResponse.class);
 
@@ -82,9 +82,7 @@ class TodoItemApiTest {
 
         String itemPath = "/api/todos/" + item.id();
 
-        assertThat(client.get().uri("/api/todos").retrieve().body(TodoItemResponse[].class))
-                .extracting(TodoItemResponse::id)
-                .contains(item.id());
+        assertThat(list("?tag=lifecycle")).extracting(TodoItemResponse::id).contains(item.id());
 
         assertThat(client.get().uri(itemPath).retrieve().body(TodoItemResponse.class)).isEqualTo(item);
 
@@ -492,6 +490,48 @@ class TodoItemApiTest {
     }
 
     @Test
+    void walksTheMatchesPageByPage() {
+        String group = "paging-walk";
+        TodoItemResponse first = create(taggedItem("Buy milk", null, group));
+        TodoItemResponse second = create(taggedItem("Buy bread", null, group));
+        TodoItemResponse third = create(taggedItem("Buy eggs", null, group));
+
+        TodoItemPageResponse page = page("?tag=" + group + "&sort=created,asc&limit=2&offset=0");
+        TodoItemPageResponse next = page("?tag=" + group + "&sort=created,asc&limit=2&offset=2");
+
+        assertThat(ids(page.items())).containsExactly(first.id(), second.id());
+        assertThat(page.limit()).isEqualTo(2);
+        assertThat(page.offset()).isZero();
+        assertThat(ids(next.items())).containsExactly(third.id());
+        assertThat(next.offset()).isEqualTo(2);
+        assertThat(ids(page.items())).doesNotContainAnyElementsOf(ids(next.items()));
+    }
+
+    @Test
+    void reportsTheSameTotalOfTheFilterOnEveryPage() {
+        String group = "paging-total";
+        create(taggedItem("Buy milk", null, group));
+        create(taggedItem("Buy bread", null, group));
+        create(taggedItem("Buy eggs", "\"done\": false", group));
+
+        assertThat(page("?tag=" + group + "&limit=1&offset=0").total()).isEqualTo(3);
+        assertThat(page("?tag=" + group + "&limit=1&offset=2").total()).isEqualTo(3);
+        assertThat(page("?tag=" + group + "&limit=1&offset=500").items()).isEmpty();
+        assertThat(page("?tag=" + group + "&limit=1&offset=500").total()).isEqualTo(3);
+    }
+
+    @Test
+    void rejectsAPagingParameterOutsideItsRange() {
+        assertBadRequest(listRaw("?limit=0"));
+        assertBadRequest(listRaw("?limit=101"));
+        assertBadRequest(listRaw("?offset=-1"));
+        assertBadRequest(listRaw("?limit=all"));
+
+        assertThat(listRaw("?limit=0").getBody()).contains("limit");
+        assertThat(listRaw("?offset=-1").getBody()).contains("offset");
+    }
+
+    @Test
     void rejectsABlankTitle() {
         ResponseEntity<String> response = client.post()
                 .uri("/api/todos")
@@ -891,7 +931,15 @@ class TodoItemApiTest {
     }
 
     private List<TodoItemResponse> list(String query) {
-        return List.of(client.get().uri("/api/todos" + query).retrieve().body(TodoItemResponse[].class));
+        return page(query).items();
+    }
+
+    private TodoItemPageResponse page(String query) {
+        return client.get().uri("/api/todos" + query).retrieve().body(TodoItemPageResponse.class);
+    }
+
+    private ResponseEntity<String> listRaw(String query) {
+        return client.get().uri("/api/todos" + query).retrieve().toEntity(String.class);
     }
 
     private static List<UUID> ids(List<TodoItemResponse> items) {

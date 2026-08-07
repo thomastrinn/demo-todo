@@ -19,6 +19,8 @@ class TodoItemQueryRepositoryImpl implements TodoItemQueryRepository {
     private static final String SELECT =
             "SELECT id, title, description, done, due_at, priority, created, updated FROM todo_item";
 
+    private static final String COUNT = "SELECT COUNT(*) FROM todo_item";
+
     private static final String SEARCH_QUERY = "websearch_to_tsquery('simple', :q)";
 
     // A sort by the priority name gives HIGH, LOW, MEDIUM, so the query ranks the values.
@@ -38,20 +40,27 @@ class TodoItemQueryRepositoryImpl implements TodoItemQueryRepository {
     }
 
     @Override
-    public List<TodoItem> search(TodoItemQuery query) {
+    public TodoItemPage<TodoItem> search(TodoItemQuery query) {
         Map<String, Object> parameters = new LinkedHashMap<>();
-        String sql = SELECT + where(query, parameters) + orderBy(query);
+        String where = where(query, parameters);
 
-        List<TodoItem> items = jdbcClient.sql(sql)
-                .params(parameters)
+        Map<String, Object> pageParameters = new LinkedHashMap<>(parameters);
+        pageParameters.put("limit", query.limit());
+        pageParameters.put("offset", query.offset());
+        List<TodoItem> items = jdbcClient.sql(SELECT + where + orderBy(query) + " LIMIT :limit OFFSET :offset")
+                .params(pageParameters)
                 .query(TodoItemQueryRepositoryImpl::mapItem)
                 .list();
+
+        // The count runs over the same filter, so it holds the matches of every page.
+        long total = jdbcClient.sql(COUNT + where).params(parameters).query(Long.class).single();
         if (items.isEmpty()) {
-            return items;
+            return new TodoItemPage<>(items, total);
         }
 
         Map<UUID, Set<TodoItemTag>> tags = loadTags(items.stream().map(TodoItem::id).toList());
-        return items.stream().map(item -> withTags(item, tags.getOrDefault(item.id(), Set.of()))).toList();
+        return new TodoItemPage<>(
+                items.stream().map(item -> withTags(item, tags.getOrDefault(item.id(), Set.of()))).toList(), total);
     }
 
     private static String where(TodoItemQuery query, Map<String, Object> parameters) {
