@@ -31,9 +31,9 @@ class TodoItemController {
 
     @PostMapping
     ResponseEntity<TodoItemResponse> create(@Valid @RequestBody CreateTodoItemRequest request) {
-        TodoItem created = service.create(
+        TodoItemWithImages created = service.create(
                 request.title(), request.description(), request.dueAt(), request.priority(), request.tags());
-        return ResponseEntity.created(URI.create("/api/todos/" + created.id()))
+        return ResponseEntity.created(URI.create("/api/todos/" + created.item().id()))
                 .body(TodoItemResponse.of(created));
     }
 

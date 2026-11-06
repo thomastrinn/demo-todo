@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -16,17 +17,25 @@ import java.util.stream.Collectors;
 class TodoItemService {
 
     private final TodoItemRepository repository;
+    private final TodoItemImageRepository imageRepository;
+    private final TodoItemImageStore imageStore;
     private final Clock clock;
 
-    TodoItemService(TodoItemRepository repository, Clock clock) {
+    TodoItemService(
+            TodoItemRepository repository,
+            TodoItemImageRepository imageRepository,
+            TodoItemImageStore imageStore,
+            Clock clock) {
         this.repository = repository;
+        this.imageRepository = imageRepository;
+        this.imageStore = imageStore;
         this.clock = clock;
     }
 
-    TodoItem create(
+    TodoItemWithImages create(
             String title, String description, OffsetDateTime dueAt, Priority priority, List<String> tags) {
         OffsetDateTime now = now();
-        return repository.save(new TodoItem(
+        TodoItem created = repository.save(new TodoItem(
                 UUID.randomUUID(),
                 title,
                 description,
@@ -37,19 +46,31 @@ class TodoItemService {
                 now,
                 now,
                 true));
+        return new TodoItemWithImages(created, List.of());
     }
 
     @Transactional(readOnly = true)
-    List<TodoItem> findAll(TodoItemQuery query) {
-        return repository.search(query);
+    List<TodoItemWithImages> findAll(TodoItemQuery query) {
+        List<TodoItem> items = repository.search(query);
+        if (items.isEmpty()) {
+            return List.of();
+        }
+        // One query for the whole page, grouped in memory, instead of a query per item.
+        Map<UUID, List<TodoItemImage>> images = imageRepository
+                .findByTodoItemIdInOrderByCreatedAscIdAsc(items.stream().map(TodoItem::id).toList())
+                .stream()
+                .collect(Collectors.groupingBy(TodoItemImage::todoItemId));
+        return items.stream()
+                .map(item -> new TodoItemWithImages(item, images.getOrDefault(item.id(), List.of())))
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    TodoItem findById(UUID id) {
-        return repository.findById(id).orElseThrow(() -> new TodoItemNotFoundException(id));
+    TodoItemWithImages findById(UUID id) {
+        return withImages(find(id));
     }
 
-    TodoItem replace(
+    TodoItemWithImages replace(
             UUID id,
             String title,
             String description,
@@ -57,8 +78,8 @@ class TodoItemService {
             OffsetDateTime dueAt,
             Priority priority,
             List<String> tags) {
-        TodoItem existing = findById(id);
-        return repository.save(new TodoItem(
+        TodoItem existing = find(id);
+        return withImages(repository.save(new TodoItem(
                 id,
                 title,
                 description,
@@ -68,10 +89,10 @@ class TodoItemService {
                 toTags(tags),
                 existing.created(),
                 now(),
-                false));
+                false)));
     }
 
-    TodoItem patch(
+    TodoItemWithImages patch(
             UUID id,
             String title,
             String description,
@@ -79,8 +100,8 @@ class TodoItemService {
             OffsetDateTime dueAt,
             Priority priority,
             List<String> tags) {
-        TodoItem existing = findById(id);
-        return repository.save(new TodoItem(
+        TodoItem existing = find(id);
+        return withImages(repository.save(new TodoItem(
                 id,
                 title != null ? title : existing.title(),
                 description != null ? description : existing.description(),
@@ -90,14 +111,27 @@ class TodoItemService {
                 tags != null ? toTags(tags) : existing.tags(),
                 existing.created(),
                 now(),
-                false));
+                false)));
     }
 
     void delete(UUID id) {
         if (!repository.existsById(id)) {
             throw new TodoItemNotFoundException(id);
         }
+        // The foreign key cascade removes the rows, so read the keys before the delete.
+        List<String> storageKeys = imageRepository.findByTodoItemIdOrderByCreatedAscIdAsc(id).stream()
+                .map(TodoItemImage::storageKey)
+                .toList();
         repository.deleteById(id);
+        storageKeys.forEach(imageStore::delete);
+    }
+
+    private TodoItem find(UUID id) {
+        return repository.findById(id).orElseThrow(() -> new TodoItemNotFoundException(id));
+    }
+
+    private TodoItemWithImages withImages(TodoItem item) {
+        return new TodoItemWithImages(item, imageRepository.findByTodoItemIdOrderByCreatedAscIdAsc(item.id()));
     }
 
     // A Set makes a duplicate tag collapse to one.

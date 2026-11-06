@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TodoItemControllerTest {
 
     private static final UUID ID = UUID.fromString("6c8e4d0a-1f2b-4c3d-8e5f-0a1b2c3d4e5f");
+    private static final UUID IMAGE_ID = UUID.fromString("1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d");
     private static final OffsetDateTime CREATED = OffsetDateTime.parse("2026-08-06T10:00:00+02:00");
     private static final OffsetDateTime UPDATED = OffsetDateTime.parse("2026-08-06T11:00:00+02:00");
     private static final OffsetDateTime DUE_AT = OffsetDateTime.parse("2026-09-01T12:00:00Z");
@@ -48,8 +49,19 @@ class TodoItemControllerTest {
     @MockitoBean
     TodoItemService service;
 
-    private static TodoItem item(String title, String description, boolean done) {
-        return new TodoItem(ID, title, description, done, null, Priority.MEDIUM, Set.of(), CREATED, UPDATED, false);
+    private static TodoItemWithImages item(String title, String description, boolean done) {
+        return new TodoItemWithImages(
+                new TodoItem(ID, title, description, done, null, Priority.MEDIUM, Set.of(), CREATED, UPDATED, false),
+                List.of());
+    }
+
+    private static TodoItemWithImages itemWithAnImage() {
+        TodoItemWithImages item = item("Buy milk", null, false);
+        return new TodoItemWithImages(
+                item.item(),
+                List.of(new TodoItemImage(
+                        IMAGE_ID, ID, "image/png", 12L, "photo.png", "todos/%s/%s".formatted(ID, IMAGE_ID),
+                        CREATED, false)));
     }
 
     @Test
@@ -69,6 +81,7 @@ class TodoItemControllerTest {
                 .andExpect(jsonPath("$.done").value(false))
                 .andExpect(jsonPath("$.priority").value("MEDIUM"))
                 .andExpect(jsonPath("$.tags").isEmpty())
+                .andExpect(jsonPath("$.images").isEmpty())
                 .andExpect(jsonPath("$.created").exists())
                 .andExpect(jsonPath("$.updated").exists());
     }
@@ -98,7 +111,8 @@ class TodoItemControllerTest {
                 CREATED,
                 UPDATED,
                 false);
-        given(service.create("Buy milk", null, DUE_AT, Priority.HIGH, List.of("work"))).willReturn(created);
+        given(service.create("Buy milk", null, DUE_AT, Priority.HIGH, List.of("work")))
+                .willReturn(new TodoItemWithImages(created, List.of()));
 
         mockMvc.perform(post("/api/todos")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -261,6 +275,21 @@ class TodoItemControllerTest {
         mockMvc.perform(get("/api/todos/{id}", ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Buy milk"));
+    }
+
+    @Test
+    void findByIdReturnsTheImagesOfTheItem() throws Exception {
+        given(service.findById(ID)).willReturn(itemWithAnImage());
+
+        mockMvc.perform(get("/api/todos/{id}", ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.images.length()").value(1))
+                .andExpect(jsonPath("$.images[0].id").value(IMAGE_ID.toString()))
+                .andExpect(jsonPath("$.images[0].contentType").value("image/png"))
+                .andExpect(jsonPath("$.images[0].sizeBytes").value(12))
+                .andExpect(jsonPath("$.images[0].fileName").value("photo.png"))
+                .andExpect(jsonPath("$.images[0].downloadPath")
+                        .value("/api/todos/" + ID + "/images/" + IMAGE_ID));
     }
 
     @Test
