@@ -44,9 +44,9 @@ class TodoItemQueryRepositoryTest {
         UUID id = save("Buy milk", false, null, Priority.MEDIUM, "work", "urgent").id();
         save("Buy bread", false, null, Priority.MEDIUM);
 
-        List<TodoItem> found = repository.search(filter(null, null, List.of("work"), null, null, null));
+        TodoItemPage<TodoItem> found = repository.search(filter(null, null, List.of("work"), null, null, null));
 
-        assertThat(found).singleElement().satisfies(item -> {
+        assertThat(found.items()).singleElement().satisfies(item -> {
             assertThat(item.id()).isEqualTo(id);
             assertThat(item.tags())
                     .containsExactlyInAnyOrder(new TodoItemTag("work"), new TodoItemTag("urgent"));
@@ -186,14 +186,14 @@ class TodoItemQueryRepositoryTest {
     void returnsNoItemWhenTheSearchTextHoldsNoSearchableWord() {
         save("Pay the invoice", false, null, Priority.MEDIUM);
 
-        assertThat(repository.search(search("+++"))).isEmpty();
+        assertThat(repository.search(search("+++")).items()).isEmpty();
     }
 
     @Test
     void doesNotMatchATagValue() {
         save("Buy milk", false, null, Priority.MEDIUM, "work");
 
-        assertThat(repository.search(search("work"))).isEmpty();
+        assertThat(repository.search(search("work")).items()).isEmpty();
     }
 
     @Test
@@ -307,6 +307,94 @@ class TodoItemQueryRepositoryTest {
         assertThat(ids(repository.search(sort("created", Sort.Direction.ASC)))).isEqualTo(order);
     }
 
+    @Test
+    void returnsTheFirstItemsOfTheOrderUpToTheLimit() {
+        List<UUID> order = saveFiveInCreatedOrder();
+
+        TodoItemPage<TodoItem> found = repository.search(page(2, 0));
+
+        assertThat(ids(found)).containsExactly(order.get(0), order.get(1));
+        assertThat(found.total()).isEqualTo(5);
+    }
+
+    @Test
+    void skipsTheEarlierMatchesOfTheOffset() {
+        List<UUID> order = saveFiveInCreatedOrder();
+
+        TodoItemPage<TodoItem> found = repository.search(page(2, 2));
+
+        assertThat(ids(found)).containsExactly(order.get(2), order.get(3));
+        assertThat(found.total()).isEqualTo(5);
+    }
+
+    @Test
+    void returnsTheRestOfTheMatchesOnTheLastPage() {
+        List<UUID> order = saveFiveInCreatedOrder();
+
+        TodoItemPage<TodoItem> found = repository.search(page(2, 4));
+
+        assertThat(ids(found)).containsExactly(order.get(4));
+        assertThat(found.total()).isEqualTo(5);
+    }
+
+    @Test
+    void returnsAnEmptyPageWithTheTotalWhenTheOffsetIsPastTheLastMatch() {
+        saveFiveInCreatedOrder();
+
+        TodoItemPage<TodoItem> found = repository.search(page(20, 500));
+
+        assertThat(found.items()).isEmpty();
+        assertThat(found.total()).isEqualTo(5);
+    }
+
+    @Test
+    void countsTheMatchesOfTheFilterAndNotTheStoredItems() {
+        save("Buy milk", false, null, Priority.MEDIUM);
+        save("Buy bread", false, null, Priority.MEDIUM);
+        save("Buy eggs", true, null, Priority.MEDIUM);
+
+        TodoItemPage<TodoItem> found =
+                repository.search(new TodoItemQuery(null, null, null, false, null, null, null, null, 1, 0));
+
+        assertThat(found.items()).hasSize(1);
+        assertThat(found.total()).isEqualTo(2);
+    }
+
+    @Test
+    void keepsTheRequestedSortUnderThePaging() {
+        save("Buy apples", false, null, Priority.MEDIUM);
+        save("Buy bread", false, null, Priority.MEDIUM);
+        UUID eggs = save("Buy eggs", false, null, Priority.MEDIUM).id();
+        UUID milk = save("Buy milk", false, null, Priority.MEDIUM).id();
+        save("Buy nuts", false, null, Priority.MEDIUM);
+
+        TodoItemPage<TodoItem> found = repository.search(page(null, "title", Sort.Direction.ASC, 2, 2));
+
+        assertThat(ids(found)).containsExactly(eggs, milk);
+        assertThat(found.total()).isEqualTo(5);
+    }
+
+    @Test
+    void keepsTheSearchFilterAndTheRelevanceOrderUnderThePaging() {
+        UUID titleHit = save("Pay the invoice", "Nothing else", false, null, Priority.MEDIUM).id();
+        save("Buy milk", "Pay the invoice", false, null, Priority.MEDIUM);
+        save("Buy bread", false, null, Priority.MEDIUM);
+
+        TodoItemPage<TodoItem> found = repository.search(page("invoice", "relevance", Sort.Direction.DESC, 1, 0));
+
+        assertThat(ids(found)).containsExactly(titleHit);
+        assertThat(found.total()).isEqualTo(2);
+    }
+
+    private List<UUID> saveFiveInCreatedOrder() {
+        return List.of(
+                saveAt("Buy milk", JANUARY).id(),
+                saveAt("Buy bread", JANUARY.plusDays(1)).id(),
+                saveAt("Buy eggs", FEBRUARY).id(),
+                saveAt("Buy nuts", FEBRUARY.plusDays(1)).id(),
+                saveAt("Buy tea", MARCH).id());
+    }
+
     private TodoItem save(String title, boolean done, OffsetDateTime dueAt, Priority priority, String... tags) {
         return save(title, null, done, dueAt, priority, tags);
     }
@@ -353,7 +441,17 @@ class TodoItemQueryRepositoryTest {
             Boolean done,
             OffsetDateTime dueBefore,
             OffsetDateTime dueAfter) {
-        return new TodoItemQuery(searchText, priorities, tags, done, dueBefore, dueAfter, null, null);
+        return new TodoItemQuery(
+                searchText,
+                priorities,
+                tags,
+                done,
+                dueBefore,
+                dueAfter,
+                null,
+                null,
+                TodoItemQuery.MAX_LIMIT,
+                TodoItemQuery.DEFAULT_OFFSET);
     }
 
     private static TodoItemQuery search(String searchText) {
@@ -361,14 +459,23 @@ class TodoItemQueryRepositoryTest {
     }
 
     private static TodoItemQuery search(String searchText, String field, Sort.Direction direction) {
-        return new TodoItemQuery(searchText, null, null, null, null, null, field, direction);
+        return page(searchText, field, direction, TodoItemQuery.MAX_LIMIT, TodoItemQuery.DEFAULT_OFFSET);
     }
 
     private static TodoItemQuery sort(String field, Sort.Direction direction) {
-        return new TodoItemQuery(null, null, null, null, null, null, field, direction);
+        return page(null, field, direction, TodoItemQuery.MAX_LIMIT, TodoItemQuery.DEFAULT_OFFSET);
     }
 
-    private static List<UUID> ids(List<TodoItem> items) {
-        return items.stream().map(TodoItem::id).toList();
+    private static TodoItemQuery page(int limit, int offset) {
+        return page(null, null, null, limit, offset);
+    }
+
+    private static TodoItemQuery page(
+            String searchText, String field, Sort.Direction direction, int limit, int offset) {
+        return new TodoItemQuery(searchText, null, null, null, null, null, field, direction, limit, offset);
+    }
+
+    private static List<UUID> ids(TodoItemPage<TodoItem> page) {
+        return page.items().stream().map(TodoItem::id).toList();
     }
 }

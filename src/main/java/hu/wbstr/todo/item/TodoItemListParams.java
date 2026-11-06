@@ -1,5 +1,7 @@
 package hu.wbstr.todo.item;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -13,6 +15,8 @@ record TodoItemListParams(
         Boolean done,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime dueBefore,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime dueAfter,
-        String sort
+        String sort,
+        @Min(TodoItemQuery.MIN_LIMIT) @Max(TodoItemQuery.MAX_LIMIT) Integer limit,
+        @Min(0) Integer offset
 ) {
 }

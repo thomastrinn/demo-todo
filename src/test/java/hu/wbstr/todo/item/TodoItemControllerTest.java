@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -53,6 +54,10 @@ class TodoItemControllerTest {
         return new TodoItemWithImages(
                 new TodoItem(ID, title, description, done, null, Priority.MEDIUM, Set.of(), CREATED, UPDATED, false),
                 List.of());
+    }
+
+    private static TodoItemPage<TodoItemWithImages> page(TodoItemWithImages... items) {
+        return new TodoItemPage<>(List.of(items), items.length);
     }
 
     private static TodoItemWithImages itemWithAnImage() {
@@ -173,26 +178,94 @@ class TodoItemControllerTest {
 
     @Test
     void listReturnsAllItems() throws Exception {
-        given(service.findAll(any())).willReturn(List.of(item("Buy milk", "Two litres", false)));
+        given(service.findAll(any())).willReturn(page(item("Buy milk", "Two litres", false)));
 
         mockMvc.perform(get("/api/todos"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(ID.toString()));
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(ID.toString()))
+                .andExpect(jsonPath("$.limit").value(20))
+                .andExpect(jsonPath("$.offset").value(0))
+                .andExpect(jsonPath("$.total").value(1));
     }
 
     @Test
-    void listReturnsAnEmptyArrayWhenNoItemExists() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+    void listReturnsAnEmptyPageWhenNoItemExists() throws Exception {
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos"))
                 .andExpect(status().isOk())
-                .andExpect(content().json("[]"));
+                .andExpect(content().json("""
+                        {"items": [], "limit": 20, "offset": 0, "total": 0}"""));
+    }
+
+    @Test
+    void listWithoutThePagingParametersQueriesTheDefaultLimitAndOffset() throws Exception {
+        given(service.findAll(any())).willReturn(page());
+
+        mockMvc.perform(get("/api/todos")).andExpect(status().isOk());
+
+        assertThat(capturedQuery().limit()).isEqualTo(20);
+        assertThat(capturedQuery().offset()).isZero();
+    }
+
+    @Test
+    void listPassesThePagingParametersToTheServiceAndEchoesThem() throws Exception {
+        given(service.findAll(any())).willReturn(new TodoItemPage<>(List.of(item("Buy milk", null, false)), 137L));
+
+        mockMvc.perform(get("/api/todos").param("limit", "5").param("offset", "40"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limit").value(5))
+                .andExpect(jsonPath("$.offset").value(40))
+                .andExpect(jsonPath("$.total").value(137));
+
+        assertThat(capturedQuery().limit()).isEqualTo(5);
+        assertThat(capturedQuery().offset()).isEqualTo(40);
+    }
+
+    @Test
+    void listWithALimitBelowOneReturns400() throws Exception {
+        mockMvc.perform(get("/api/todos").param("limit", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail", containsString("limit")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void listWithALimitAboveOneHundredReturns400() throws Exception {
+        mockMvc.perform(get("/api/todos").param("limit", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail", containsString("limit")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void listWithANegativeOffsetReturns400() throws Exception {
+        mockMvc.perform(get("/api/todos").param("offset", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail", containsString("offset")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void listWithALimitThatIsNotANumberReturns400() throws Exception {
+        mockMvc.perform(get("/api/todos").param("limit", "all"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("limit must be a number"));
+
+        verifyNoInteractions(service);
     }
 
     @Test
     void listWithoutASortParameterQueriesTheCreatedTimestampNewestFirst() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos")).andExpect(status().isOk());
 
@@ -202,7 +275,7 @@ class TodoItemControllerTest {
 
     @Test
     void listPassesTheFiltersAndTheSortToTheService() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos")
                         .param("priority", "HIGH", "LOW")
@@ -225,7 +298,7 @@ class TodoItemControllerTest {
 
     @Test
     void listPassesTheSearchTextToTheService() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos").param("q", "invoice")).andExpect(status().isOk());
 
@@ -234,7 +307,7 @@ class TodoItemControllerTest {
 
     @Test
     void listWithABlankSearchTextPassesNullToTheService() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos").param("q", "   ")).andExpect(status().isOk());
 
@@ -243,7 +316,7 @@ class TodoItemControllerTest {
 
     @Test
     void listTrimsTheOuterSpacesOfTheSearchText() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos").param("q", "  invoice  ")).andExpect(status().isOk());
 
@@ -252,7 +325,7 @@ class TodoItemControllerTest {
 
     @Test
     void listWithASearchTextAndNoSortQueriesTheRelevanceBestFirst() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos").param("q", "invoice")).andExpect(status().isOk());
 
@@ -262,7 +335,7 @@ class TodoItemControllerTest {
 
     @Test
     void listWithABlankSearchTextAndNoSortQueriesTheCreatedTimestampNewestFirst() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos").param("q", " ")).andExpect(status().isOk());
 
@@ -290,7 +363,7 @@ class TodoItemControllerTest {
 
     @Test
     void listWithASortFieldOnlyUsesTheAscendingDirection() throws Exception {
-        given(service.findAll(any())).willReturn(List.of());
+        given(service.findAll(any())).willReturn(page());
 
         mockMvc.perform(get("/api/todos").param("sort", "title")).andExpect(status().isOk());
 

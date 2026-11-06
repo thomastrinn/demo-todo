@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -38,8 +37,9 @@ class TodoItemController {
     }
 
     @GetMapping
-    List<TodoItemResponse> findAll(@Valid TodoItemListParams params) {
-        return service.findAll(toQuery(params)).stream().map(TodoItemResponse::of).toList();
+    TodoItemPageResponse findAll(@Valid TodoItemListParams params) {
+        TodoItemQuery query = toQuery(params);
+        return TodoItemPageResponse.of(service.findAll(query), query.limit(), query.offset());
     }
 
     @GetMapping("/{id}")
@@ -105,7 +105,9 @@ class TodoItemController {
                 params.dueBefore(),
                 params.dueAfter(),
                 field,
-                direction);
+                direction,
+                limit(params),
+                offset(params));
     }
 
     private static String searchText(TodoItemListParams params) {
@@ -113,5 +115,13 @@ class TodoItemController {
             return null;
         }
         return params.q().trim();
+    }
+
+    private static int limit(TodoItemListParams params) {
+        return params.limit() != null ? params.limit() : TodoItemQuery.DEFAULT_LIMIT;
+    }
+
+    private static int offset(TodoItemListParams params) {
+        return params.offset() != null ? params.offset() : TodoItemQuery.DEFAULT_OFFSET;
     }
 }
