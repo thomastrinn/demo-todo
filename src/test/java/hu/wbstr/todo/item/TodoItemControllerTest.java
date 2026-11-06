@@ -415,8 +415,15 @@ class TodoItemControllerTest {
     }
 
     @Test
-    void patchWithTheDoneFlagOnlyPassesNullForTheOtherFields() throws Exception {
-        given(service.patch(ID, null, null, true, null, null, null))
+    void patchWithTheDoneFlagOnlyPassesUndefinedForTheOtherFields() throws Exception {
+        given(service.patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.of(true),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined()))
                 .willReturn(item("Buy milk", "Two litres", true));
 
         mockMvc.perform(patch("/api/todos/{id}", ID)
@@ -428,12 +435,56 @@ class TodoItemControllerTest {
                 .andExpect(jsonPath("$.description").value("Two litres"))
                 .andExpect(jsonPath("$.done").value(true));
 
-        verify(service).patch(ID, null, null, true, null, null, null);
+        verify(service)
+                .patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.of(true),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined());
+    }
+
+    @Test
+    void patchWithAnExplicitNullDescriptionPassesAPresentNull() throws Exception {
+        given(service.patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.of(null),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined()))
+                .willReturn(item("Buy milk", null, false));
+
+        mockMvc.perform(patch("/api/todos/{id}", ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"description": null}"""))
+                .andExpect(status().isOk());
+
+        verify(service)
+                .patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.of(null),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined());
     }
 
     @Test
     void patchWithAnEmptyTagListPassesTheEmptyList() throws Exception {
-        given(service.patch(ID, null, null, null, null, null, List.of()))
+        given(service.patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.of(List.of())))
                 .willReturn(item("Buy milk", null, false));
 
         mockMvc.perform(patch("/api/todos/{id}", ID)
@@ -442,7 +493,15 @@ class TodoItemControllerTest {
                                 {"tags": []}"""))
                 .andExpect(status().isOk());
 
-        verify(service).patch(ID, null, null, null, null, null, List.of());
+        verify(service)
+                .patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.of(List.of()));
     }
 
     @Test
@@ -458,8 +517,75 @@ class TodoItemControllerTest {
     }
 
     @Test
+    void patchWithAnExplicitNullTitleReturns400() throws Exception {
+        mockMvc.perform(patch("/api/todos/{id}", ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title": null}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void patchWithAnExplicitNullDoneFlagReturns400() throws Exception {
+        mockMvc.perform(patch("/api/todos/{id}", ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"done": null}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void patchWithAnExplicitNullPriorityReturns400() throws Exception {
+        mockMvc.perform(patch("/api/todos/{id}", ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"priority": null}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void patchWithAnExplicitNullTagListReturns400() throws Exception {
+        mockMvc.perform(patch("/api/todos/{id}", ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"tags": null}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void patchWithAnExplicitNullTagReturns400() throws Exception {
+        mockMvc.perform(patch("/api/todos/{id}", ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"tags": [null]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void patchReturns404ForAnUnknownItem() throws Exception {
-        given(service.patch(ID, null, null, true, null, null, null))
+        given(service.patch(
+                        ID,
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.of(true),
+                        Patchable.undefined(),
+                        Patchable.undefined(),
+                        Patchable.undefined()))
                 .willThrow(new TodoItemNotFoundException(ID));
 
         mockMvc.perform(patch("/api/todos/{id}", ID)
