@@ -342,6 +342,47 @@ class TodoItemApiTest {
     }
 
     @Test
+    void searchesTheTitleAndTheDescriptionByAWord() {
+        String group = "search-word";
+        TodoItemResponse title = create(taggedItem("Pay the invoice", null, group));
+        TodoItemResponse description =
+                create(taggedItem("Buy milk", "\"description\": \"File the receipt\"", group));
+        create(taggedItem("Walk the dog", null, group));
+
+        assertThat(ids(list("?tag=" + group + "&q=invoice"))).containsExactly(title.id());
+        assertThat(ids(list("?tag=" + group + "&q=receipt"))).containsExactly(description.id());
+    }
+
+    @Test
+    void combinesTheSearchAndAFilter() {
+        String group = "search-filter";
+        TodoItemResponse high = create(taggedItem("Pay the invoice", "\"priority\": \"HIGH\"", group));
+        create(taggedItem("Pay the invoice twice", "\"priority\": \"LOW\"", group));
+
+        assertThat(ids(list("?tag=" + group + "&q=invoice&priority=HIGH"))).containsExactly(high.id());
+    }
+
+    @Test
+    void putsTheTitleHitFirstInARelevanceSort() {
+        String group = "search-relevance";
+        TodoItemResponse title = create(taggedItem("Pay the invoice", null, group));
+        TodoItemResponse description =
+                create(taggedItem("Buy milk", "\"description\": \"Pay the invoice\"", group));
+
+        assertThat(ids(list("?tag=" + group + "&q=invoice&sort=relevance,desc")))
+                .containsExactly(title.id(), description.id());
+    }
+
+    @Test
+    void returnsEveryItemForABlankSearchText() {
+        String group = "search-blank";
+        TodoItemResponse first = create(taggedItem("Pay the invoice", null, group));
+        TodoItemResponse second = create(taggedItem("Buy milk", null, group));
+
+        assertThat(ids(list("?tag=" + group + "&q= "))).containsExactly(second.id(), first.id());
+    }
+
+    @Test
     void rejectsABlankTitle() {
         ResponseEntity<String> response = client.post()
                 .uri("/api/todos")

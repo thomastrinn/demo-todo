@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 record TodoItemQuery(
+        String searchText,
         List<Priority> priorities,
         List<String> tags,
         Boolean done,
@@ -18,5 +19,8 @@ record TodoItemQuery(
 
     static final String DEFAULT_SORT_FIELD = "created";
 
-    static final Set<String> SORT_FIELDS = Set.of(DEFAULT_SORT_FIELD, "dueAt", "priority", "updated", "title");
+    static final String RELEVANCE_SORT_FIELD = "relevance";
+
+    static final Set<String> SORT_FIELDS =
+            Set.of(DEFAULT_SORT_FIELD, RELEVANCE_SORT_FIELD, "dueAt", "priority", "updated", "title");
 }
