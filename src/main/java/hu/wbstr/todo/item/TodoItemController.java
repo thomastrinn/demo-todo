@@ -1,6 +1,7 @@
 package hu.wbstr.todo.item;
 
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,14 +31,15 @@ class TodoItemController {
 
     @PostMapping
     ResponseEntity<TodoItemResponse> create(@Valid @RequestBody CreateTodoItemRequest request) {
-        TodoItem created = service.create(request.title(), request.description());
+        TodoItem created = service.create(
+                request.title(), request.description(), request.dueAt(), request.priority(), request.tags());
         return ResponseEntity.created(URI.create("/api/todos/" + created.id()))
                 .body(TodoItemResponse.of(created));
     }
 
     @GetMapping
-    List<TodoItemResponse> findAll() {
-        return service.findAll().stream().map(TodoItemResponse::of).toList();
+    List<TodoItemResponse> findAll(TodoItemListParams params) {
+        return service.findAll(toQuery(params)).stream().map(TodoItemResponse::of).toList();
     }
 
     @GetMapping("/{id}")
@@ -47,17 +49,55 @@ class TodoItemController {
 
     @PutMapping("/{id}")
     TodoItemResponse replace(@PathVariable UUID id, @Valid @RequestBody ReplaceTodoItemRequest request) {
-        return TodoItemResponse.of(service.replace(id, request.title(), request.description(), request.done()));
+        return TodoItemResponse.of(service.replace(
+                id,
+                request.title(),
+                request.description(),
+                request.done(),
+                request.dueAt(),
+                request.priority(),
+                request.tags()));
     }
 
     @PatchMapping("/{id}")
     TodoItemResponse patch(@PathVariable UUID id, @Valid @RequestBody PatchTodoItemRequest request) {
-        return TodoItemResponse.of(service.patch(id, request.title(), request.description(), request.done()));
+        return TodoItemResponse.of(service.patch(
+                id,
+                request.title(),
+                request.description(),
+                request.done(),
+                request.dueAt(),
+                request.priority(),
+                request.tags()));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void delete(@PathVariable UUID id) {
         service.delete(id);
+    }
+
+    private static TodoItemQuery toQuery(TodoItemListParams params) {
+        String field = TodoItemQuery.DEFAULT_SORT_FIELD;
+        Sort.Direction direction = Sort.Direction.DESC;
+        if (params.sort() != null) {
+            String[] parts = params.sort().split(",", 2);
+            field = parts[0];
+            direction = parts.length == 2
+                    ? Sort.Direction.fromOptionalString(parts[1])
+                            .orElseThrow(() -> new InvalidTodoItemSortException(params.sort()))
+                    : Sort.Direction.ASC;
+            if (!TodoItemQuery.SORT_FIELDS.contains(field)) {
+                throw new InvalidTodoItemSortException(params.sort());
+            }
+        }
+        return new TodoItemQuery(
+                params.priority(),
+                params.tag(),
+                params.done(),
+                params.dueBefore(),
+                params.dueAfter(),
+                field,
+                direction);
     }
 }
